@@ -37,11 +37,18 @@ app.use(morgan('tiny'))
     response.send(info())
   })
 // get person id, modified to get data from database
-  app.get('/api/persons/:id', (request, response) => {
+  app.get('/api/persons/:id', (request, response, next) => {
     Person.findById(request.params.id).then(person => {
-      response.json(person)
+      if (person) {
+        response.json(person)
+      }
+      else {
+        response.status(404).end()
+      }
     })
+    .catch(error => next(error))
   })
+
   // delete person, modified to delete from database.
   app.delete('/api/persons/:id', (request, response) => {
     const id = request.params.id
@@ -49,15 +56,12 @@ app.use(morgan('tiny'))
     .then(result => {
       response.status(204).end()
     })
-    .catch(error => {
-      console.log("error deleting", error.message)
-    })
+    .catch(error => next(error))
   })
 
   // post person, modified to post to mongoDB
-  app.post('/api/persons', (request, response) => {
+  app.post('/api/persons', (request, response, next) => {
     const body = request.body
-    
     const person = new Person({
       name: body.name,
       number: body.number
@@ -67,11 +71,34 @@ app.use(morgan('tiny'))
       response.json(savedPerson)
       response.status(200).end()
     })
-    .catch(error => {
-      console.error(error)
-      response.status(500).json({error: "failed to save person"})
-    })
+    .catch(error => next(error))
   })
+
+ // unkown endpoint handler
+  const unkownEndpoint = (request, response) => {
+    response.status(404).send({ error: "unknown endpoint" })
+  }
+
+  app.use(unkownEndpoint)
+// error handler
+  const errorHandler = (error, request, response, next) => {
+    console.error(error.message)
+
+    if (error.name === "CastError") {
+      return response.status(400).send( {error:"malformatted id"} )
+    }
+    // added an if for validation errors to show a more compact error message
+    else if (error.name === "ValidationError") {
+      return response.status(400).json({
+        error: "validation error",
+        message: error.message
+      })
+    }
+    next(error)
+  }
+
+  app.use(errorHandler)
+
 
 const PORT = process.env.PORT
 app.listen(PORT, () => {
